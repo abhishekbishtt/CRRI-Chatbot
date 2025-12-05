@@ -7,7 +7,13 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>CRRI Assistant</h1>
+        <h1
+          onClick={() => window.location.reload()}
+          style={{ cursor: 'pointer' }}
+          title="Reload Chatbot"
+        >
+          CRRI Assistant
+        </h1>
       </header>
       <main className="app-main">
         <ChatContainer />
