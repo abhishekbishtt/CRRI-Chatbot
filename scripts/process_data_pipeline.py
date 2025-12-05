@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Set
 from collections import defaultdict
+import hashlib
 
 # Configuration
 RAW_DATA_DIR = Path("data/raw")
