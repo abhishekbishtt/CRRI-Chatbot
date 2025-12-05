@@ -11,6 +11,8 @@ short_description: AI-powered chatbot for Central Road Research Institute Delhi
 
 # 🤖 CRRI Chatbot
 
+[![Hugging Face Spaces](https://img.shields.io/badge/🤗%20Hugging%20Face-Live%20Demo-blue)](https://huggingface.co/spaces/abhishekbisht/CRRI-Chatbot)
+
 An intelligent chatbot for **Central Road Research Institute (CRRI) Delhi**, powered by **RAG (Retrieval Augmented Generation)**.
 
 ## ✨ Features
@@ -21,6 +23,31 @@ An intelligent chatbot for **Central Road Research Institute (CRRI) Delhi**, pow
 - 📋 **Tender Information** - Access current and past tenders
 - 🧠 **Powered by AI** - Google Gemini 2.5 Flash + Pinecone Vector Database
 - 🎨 **Modern UI** - Beautiful, responsive React interface
+
+## 🛠️ Local Installation
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/abhishekbishtt/CRRI-Chatbot.git
+cd CRRI-Chatbot
+```
+
+### 2. Set up environment
+```bash
+# install dependencies
+pip install -r requirements.txt
+
+# Create .env file with your API keys
+cp .env.example .env
+# Edit .env and add your GOOGLE_API_KEY and PINECONE_API_KEY
+```
+
+### 3. Run the application
+```bash
+# Start backend and frontend (if using separate terminals)
+python main.py
+cd frontend && npm run dev
+```
 
 ## 🚀 Technology Stack
 
