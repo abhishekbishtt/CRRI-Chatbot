@@ -1,0 +1,39 @@
+# ==========================================
+# CRRI RAG Chatbot - Requirements
+# ==========================================
+
+# --- Core LangChain ecosystem ---
+langchain>=0.3.0
+langchain-core>=0.3.34
+langchain-community>=0.3.0
+langchain-google-genai==2.1.12
+langchain-pinecone>=0.2.12
+
+# --- Google dependencies ---
+cachetools==5.3.3
+
+# --- Web scraping ---
+scrapy==2.11.2
+beautifulsoup4==4.12.3
+lxml==5.2.2
+
+# --- Document & data processing ---
+pdfplumber==0.9.0
+pymupdf==1.24.1
+pandas==2.2.2
+
+# --- Vector databases & embeddings ---
+pinecone-client>=3.0.0
+sentence-transformers>=2.6.0
+langchain-huggingface>=0.1.0
+
+# --- Environment management ---
+python-dotenv==1.0.1
+
+# --- Backend API ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
+# --- Utilities ---
+requests==2.32.3
+python-dateutil==2.9.0.post0
