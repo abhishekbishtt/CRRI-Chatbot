@@ -231,7 +231,7 @@ data/logs/*.log
 *.log
 
 # Keep essential files and directory structure
-!data/raw/contacts.pdf
+data/raw/contacts.pdf
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/logs/.gitkeep
