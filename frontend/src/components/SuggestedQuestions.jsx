@@ -1,5 +1,6 @@
 // frontend/src/components/SuggestedQuestions.jsx
 import React from 'react';
+import { motion } from 'framer-motion';
 
 const SuggestedQuestions = ({ onQuestionClick }) => {
     const suggestions = [
@@ -23,24 +24,34 @@ const SuggestedQuestions = ({ onQuestionClick }) => {
 
     return (
         <div className="suggestions-container">
-            <div className="suggestions-content">
+            <motion.div
+                className="suggestions-content"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+            >
                 <div className="suggestions-welcome">
                     <h2>Welcome to CRRI Assistant</h2>
                     <p>How can I help you today?</p>
                 </div>
                 <div className="suggestions-grid">
                     {suggestions.map((suggestion, index) => (
-                        <div
+                        <motion.div
                             key={index}
                             className="suggestion-card"
                             onClick={() => onQuestionClick(suggestion.text)}
+                            whileHover={{ scale: 1.01, x: 3, backgroundColor: "var(--bg-hover)" }}
+                            whileTap={{ scale: 0.99 }}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.1, type: "spring", stiffness: 300, damping: 20 }}
                         >
                             <div className="suggestion-icon">{suggestion.icon}</div>
                             <div className="suggestion-text">{suggestion.text}</div>
-                        </div>
+                        </motion.div>
                     ))}
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 };
