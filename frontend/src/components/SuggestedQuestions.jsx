@@ -13,7 +13,7 @@ const SuggestedQuestions = ({ onQuestionClick }) => {
         },
         {
             icon: '🏠',
-            text: 'how to get accomodation at CRRI delhi'
+            text: 'How to get accomodation at CRRI delhi'
         },
         {
             icon: '🔧',
