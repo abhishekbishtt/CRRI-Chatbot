@@ -5,20 +5,20 @@ import { motion } from 'framer-motion';
 const SuggestedQuestions = ({ onQuestionClick }) => {
     const suggestions = [
         {
-            icon: '👤',
-            text: 'May I know the contact details of Miss Reeta Kukreja?'
-        },
-        {
             icon: '📋',
             text: 'Can you provide information about current tenders?'
         },
         {
-            icon: '🔧',
-            text: 'What is the working principle and applications of Pile Integrity Tester (PIT)?'
+            icon: '👤',
+            text: 'May I know the contact details of Miss Reeta Kukreja?'
         },
         {
-            icon: '💰',
-            text: 'What are the instrument usage charges for Ultrasonic Pulse Echo Test System?'
+            icon: '🏠',
+            text: 'how to get accomodation at CRRI delhi'
+        },
+        {
+            icon: '🔧',
+            text: 'What is the working principle and applications of Pile Integrity Tester (PIT)?'
         }
     ];
 

@@ -1,9 +1,6 @@
 """
-Professional Data Processing Pipeline for CRRI Chatbot
+Data Processing Pipeline for CRRI Chatbot
 Processes raw scraped data into clean, deduplicated chunks ready for embedding.
-
-Author: CRRI Development Team
-Date: 2025-12-05
 """
 
 import json
@@ -53,7 +50,6 @@ class DataProcessor:
         content = self.standardize_text(content)
         content_hash = hash(content)
         
-        # Skip if we've seen this exact content before
         if content_hash in self.seen_content_hashes:
             self.stats['duplicates_skipped'] += 1
             return None
@@ -72,7 +68,6 @@ class DataProcessor:
         """
         logger.info(f"Processing {len(records)} staff profile records...")
         
-        # Group by staff member (name + primary division)
         staff_data = {}
         
         for record in records:
@@ -80,7 +75,6 @@ class DataProcessor:
             if not name:
                 continue
             
-            # Get primary division
             division = record.get('division', '')
             if not division:
                 divisions = record.get('divisions', [])
@@ -88,31 +82,24 @@ class DataProcessor:
             
             division = self.standardize_text(division)
             
-            # Use (name, division) as unique key
             key = (name.lower(), division.lower())
             
-            # Store the most complete record for this person
             if key not in staff_data:
                 staff_data[key] = record
             else:
-                # Merge data if we see the same person again
                 existing = staff_data[key]
-                # Prefer records with more information
                 if len(str(record)) > len(str(existing)):
                     staff_data[key] = record
         
-        # Create chunks from unique staff
         for (name_key, div_key), record in staff_data.items():
             name = self.standardize_text(record.get('name', ''))
             title = self.standardize_text(record.get('title', ''))
             
-            # Get all designations
             designations = record.get('designations', [])
             if not designations and record.get('designation'):
                 designations = [record.get('designation')]
             designations = [self.standardize_text(d) for d in designations if d]
             
-            # Get all divisions
             divisions = record.get('divisions', [])
             if not divisions and record.get('division'):
                 divisions = [record.get('division')]
@@ -120,10 +107,8 @@ class DataProcessor:
             
             primary_division = divisions[0] if divisions else 'Unknown'
             
-            # Get CV links
             cv_links = record.get('cv_links', [])
             
-            # Build comprehensive text content
             text_parts = [
                 f"Staff Member: {name}",
                 f"Title: {title}" if title else None,
@@ -135,7 +120,6 @@ class DataProcessor:
             
             text = ". ".join([p for p in text_parts if p]) + "."
             
-            # Create metadata
             metadata = {
                 'source_type': 'staff',
                 'page_type': 'staff_profile',
@@ -160,8 +144,6 @@ class DataProcessor:
         if not text:
             return None
             
-        # Patterns to look for dates near "Deadline" or "Last Date"
-        # Matches: "Deadline: 15th November 2025", "Last Date: 15 Nov 2025"
         patterns = [
             r'(?:deadline|last date).*?(\d{1,2}\s*(?:st|nd|rd|th)?\s+[a-zA-Z]+\s+\d{4})',
             r'(?:deadline|last date).*?(\d{1,2}[-/]\d{1,2}[-/]\d{4})'
@@ -171,7 +153,6 @@ class DataProcessor:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 date_str = match.group(1)
-                # Use the existing parse_deadline method
                 dt = self.parse_deadline(date_str)
                 if dt:
                     return dt
@@ -193,13 +174,11 @@ class DataProcessor:
             summary = self.standardize_text(record.get('brief_summary', ''))
             full_content = self.standardize_text(record.get('full_content', ''))
             
-            # Use full content if available, otherwise summary
             content = full_content if full_content else summary
             
             if not content:
                 continue
                 
-            # Check for expired EOIs/Tenders disguised as news
             if "expression of interest" in headline.lower() or "eoi" in headline.lower() or "tender" in headline.lower():
                 deadline_dt = self.extract_deadline_from_text(content)
                 if deadline_dt and deadline_dt < current_time:
@@ -240,7 +219,6 @@ class DataProcessor:
             model = self.standardize_text(record.get('model', ''))
             spec = self.standardize_text(record.get('specification', ''))
             
-            # Get detailed information - handle lists
             working_principles = record.get('working_principles', '')
             if isinstance(working_principles, list):
                 working_principles = ' '.join(str(x) for x in working_principles if x)
@@ -254,7 +232,6 @@ class DataProcessor:
             usage_charges = self.standardize_text(str(record.get('usage_charges', '')))
             contact = self.standardize_text(str(record.get('contact_details', '')))
             
-            # Build comprehensive text
             text_parts = [
                 f"Equipment: {name}",
                 f"Division: {division}",
@@ -295,18 +272,14 @@ class DataProcessor:
         if not date_str or date_str.lower() == 'not specified':
             return None
         
-        # Clean up the string
-        # Remove ordinal suffixes like 'st', 'nd', 'rd', 'th' from numbers
-        # Handle cases like "15th" and "15 th"
         clean_str = re.sub(r'(\d+)\s*(st|nd|rd|th)', r'\1', date_str)
-        # Remove extra spaces
         clean_str = re.sub(r'\s+', ' ', clean_str).strip()
         
         formats = [
-            "%d %b %Y - %I:%M%p",  # 4 Dec 2025 - 3:00pm
-            "%d %B %Y - %I:%M%p",  # 4 December 2025 - 3:00pm
-            "%d %B %Y",            # 15 November 2025
-            "%d %b %Y",            # 4 Dec 2025
+            "%d %b %Y - %I:%M%p",
+            "%d %B %Y - %I:%M%p",
+            "%d %B %Y",
+            "%d %b %Y",
             "%d-%m-%Y",
             "%d/%m/%Y",
             "%Y-%m-%d"
@@ -338,21 +311,18 @@ class DataProcessor:
             description = self.standardize_text(record.get('description', ''))
             deadline_str = self.standardize_text(record.get('bid_submission_deadline', 'Not specified'))
             
-            # Check if tender is expired
             deadline_dt = self.parse_deadline(deadline_str)
             if deadline_dt and deadline_dt < current_time:
                 logger.info(f"Skipping expired tender: {title} (Deadline: {deadline_str})")
                 expired_tenders_count += 1
                 continue
             
-            # Extract PDF files to include in text
             pdf_files = record.get('pdf_files', [])
             pdf_text_parts = []
             for pdf in pdf_files:
                 p_title = self.standardize_text(pdf.get('title', 'Document'))
                 p_url = pdf.get('url', '')
                 if p_url:
-                    # Use Markdown format for links so the LLM picks it up easily
                     pdf_text_parts.append(f"[{p_title}]({p_url})")
             
             pdf_section = "Documents: " + ", ".join(pdf_text_parts) if pdf_text_parts else ""
@@ -418,11 +388,9 @@ class DataProcessor:
                 logger.warning(f"Empty file: {filepath}")
                 return
             
-            # Determine data type from filename or first record
             filename = filepath.name.lower()
             
             if 'staff' in filename:
-                # Filter for staff profiles only
                 staff_records = [r for r in data if r.get('page_type') == 'staff_profile']
                 self.process_staff_profiles(staff_records)
             elif 'news' in filename:
@@ -482,11 +450,9 @@ def main():
     logger.info("STEP 2: Processing raw JSON files...")
     processor = DataProcessor()
     
-    # Find all raw JSON files
     raw_files = list(RAW_DATA_DIR.glob("*.json"))
     logger.info(f"Found {len(raw_files)} raw data files")
     
-    # Process each file
     for raw_file in raw_files:
         processor.load_and_process_file(raw_file)
     
@@ -494,7 +460,6 @@ def main():
     logger.info("STEP 3: Merging with processed PDF contacts...")
     pdf_contacts_files = list(PROCESSED_DATA_DIR.glob("processed_pdf_contacts_*.jsonl"))
     if pdf_contacts_files:
-        # Get the latest PDF contacts file
         latest_pdf_contacts = max(pdf_contacts_files, key=lambda p: p.stat().st_mtime)
         logger.info(f"Found PDF contacts file: {latest_pdf_contacts.name}")
         
@@ -502,7 +467,6 @@ def main():
             with open(latest_pdf_contacts, 'r', encoding='utf-8') as f:
                 for line in f:
                     chunk = json.loads(line.strip())
-                    # Add to processor's chunks
                     content_hash = hashlib.md5(chunk['page_content'].encode()).hexdigest()
                     if content_hash not in processor.seen_content_hashes:
                         processor.processed_chunks.append(chunk)

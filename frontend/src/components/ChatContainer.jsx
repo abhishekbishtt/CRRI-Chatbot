@@ -30,17 +30,11 @@ const ChatContainer = () => {
     setIsLoading(true);
 
     try {
-      // --- Prepare conversation history for the API call ---
-      // Map UI messages to the format expected by the backend
-      // [{id: ..., text: "...", sender: "user/assistant"}, ...] ->
-      // [{role: "user", content: "..."}, {role: "assistant", content: "..."}]
       const conversationHistory = newMessages.map(msg => ({
         role: msg.sender === 'user' ? 'user' : 'assistant',
         content: msg.text
       }));
-      // --- End Preparation ---
 
-      // Call the updated API utility function with the full history
       const answer = await sendMessageToAPI(conversationHistory);
 
       const botMessage = { id: Date.now() + 1, text: answer, sender: 'bot' };
@@ -67,7 +61,6 @@ const ChatContainer = () => {
 
   const handleSuggestedQuestion = (question) => {
     setInputText(question);
-    // Automatically send the question
     setTimeout(() => {
       const userMessage = { id: Date.now(), text: question, sender: 'user' };
       const newMessages = [...messages, userMessage];
