@@ -155,9 +155,35 @@ class DataProcessor:
                 self.processed_chunks.append(chunk)
                 self.stats['staff_profiles'] += 1
     
+    def extract_deadline_from_text(self, text: str) -> datetime:
+        """Attempt to extract a deadline date from text."""
+        if not text:
+            return None
+            
+        # Patterns to look for dates near "Deadline" or "Last Date"
+        # Matches: "Deadline: 15th November 2025", "Last Date: 15 Nov 2025"
+        patterns = [
+            r'(?:deadline|last date).*?(\d{1,2}\s*(?:st|nd|rd|th)?\s+[a-zA-Z]+\s+\d{4})',
+            r'(?:deadline|last date).*?(\d{1,2}[-/]\d{1,2}[-/]\d{4})'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                date_str = match.group(1)
+                # Use the existing parse_deadline method
+                dt = self.parse_deadline(date_str)
+                if dt:
+                    return dt
+        return None
+
     def process_news(self, records: List[Dict]) -> None:
         """Process news records."""
         logger.info(f"Processing {len(records)} news records...")
+        
+        active_news_count = 0
+        expired_news_count = 0
+        current_time = datetime.now()
         
         for record in records:
             headline = self.standardize_text(record.get('headline', ''))
@@ -172,6 +198,14 @@ class DataProcessor:
             
             if not content:
                 continue
+                
+            # Check for expired EOIs/Tenders disguised as news
+            if "expression of interest" in headline.lower() or "eoi" in headline.lower() or "tender" in headline.lower():
+                deadline_dt = self.extract_deadline_from_text(content)
+                if deadline_dt and deadline_dt < current_time:
+                    logger.info(f"Skipping expired News/EOI: {headline} (Deadline: {deadline_dt.strftime('%Y-%m-%d')})")
+                    expired_news_count += 1
+                    continue
             
             text = f"News: {headline}. {content}"
             
@@ -188,6 +222,9 @@ class DataProcessor:
             if chunk:
                 self.processed_chunks.append(chunk)
                 self.stats['news'] += 1
+                active_news_count += 1
+                
+        logger.info(f"News processed: {active_news_count} active, {expired_news_count} expired/skipped.")
     
     def process_equipment(self, records: List[Dict]) -> None:
         """Process equipment records with full details."""
@@ -253,9 +290,44 @@ class DataProcessor:
                 self.processed_chunks.append(chunk)
                 self.stats['equipment'] += 1
     
+    def parse_deadline(self, date_str: str) -> datetime:
+        """Parse tender deadline string into datetime object."""
+        if not date_str or date_str.lower() == 'not specified':
+            return None
+        
+        # Clean up the string
+        # Remove ordinal suffixes like 'st', 'nd', 'rd', 'th' from numbers
+        # Handle cases like "15th" and "15 th"
+        clean_str = re.sub(r'(\d+)\s*(st|nd|rd|th)', r'\1', date_str)
+        # Remove extra spaces
+        clean_str = re.sub(r'\s+', ' ', clean_str).strip()
+        
+        formats = [
+            "%d %b %Y - %I:%M%p",  # 4 Dec 2025 - 3:00pm
+            "%d %B %Y - %I:%M%p",  # 4 December 2025 - 3:00pm
+            "%d %B %Y",            # 15 November 2025
+            "%d %b %Y",            # 4 Dec 2025
+            "%d-%m-%Y",
+            "%d/%m/%Y",
+            "%Y-%m-%d"
+        ]
+        
+        for fmt in formats:
+            try:
+                return datetime.strptime(clean_str, fmt)
+            except ValueError:
+                continue
+        
+        return None
+
     def process_tenders(self, records: List[Dict]) -> None:
         """Process tender records."""
         logger.info(f"Processing {len(records)} tender records...")
+        
+        active_tenders_count = 0
+        expired_tenders_count = 0
+        
+        current_time = datetime.now()
         
         for record in records:
             title = self.standardize_text(record.get('tender_title', ''))
@@ -264,7 +336,14 @@ class DataProcessor:
             
             ref_no = self.standardize_text(record.get('reference_no', ''))
             description = self.standardize_text(record.get('description', ''))
-            deadline = self.standardize_text(record.get('bid_submission_deadline', 'Not specified'))
+            deadline_str = self.standardize_text(record.get('bid_submission_deadline', 'Not specified'))
+            
+            # Check if tender is expired
+            deadline_dt = self.parse_deadline(deadline_str)
+            if deadline_dt and deadline_dt < current_time:
+                logger.info(f"Skipping expired tender: {title} (Deadline: {deadline_str})")
+                expired_tenders_count += 1
+                continue
             
             # Extract PDF files to include in text
             pdf_files = record.get('pdf_files', [])
@@ -278,14 +357,14 @@ class DataProcessor:
             
             pdf_section = "Documents: " + ", ".join(pdf_text_parts) if pdf_text_parts else ""
             
-            text = f"Tender: {title}. Reference: {ref_no}. Deadline: {deadline}. {description}. {pdf_section}"
+            text = f"Tender: {title}. Reference: {ref_no}. Deadline: {deadline_str}. {description}. {pdf_section}"
             
             metadata = {
                 'source_type': 'tender',
                 'page_type': 'tender_detail',
                 'tender_title': title,
                 'reference_no': ref_no,
-                'bid_submission_deadline': deadline,
+                'bid_submission_deadline': deadline_str,
                 'pdf_files': pdf_files,
                 'source_url': record.get('source_url', record.get('url', 'unknown')),
                 'scraped_at': record.get('scraped_at', datetime.utcnow().isoformat())
@@ -295,6 +374,9 @@ class DataProcessor:
             if chunk:
                 self.processed_chunks.append(chunk)
                 self.stats['tenders'] += 1
+                active_tenders_count += 1
+                
+        logger.info(f"Tenders processed: {active_tenders_count} active, {expired_tenders_count} expired/skipped.")
     
     def process_events(self, records: List[Dict]) -> None:
         """Process event records."""

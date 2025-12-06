@@ -44,7 +44,7 @@ else
 fi
 
 log "  - Scraping news..."
-conda run -n Chatbot python src/scraper/news_scraper.py >> "$LOG_FILE" 2>&1
+conda run -n Chatbot scrapy crawl crri_news -O "data/raw/scraped_news_$(date +%Y%m%d_%H%M%S).json" >> "$LOG_FILE" 2>&1
 if [ $? -eq 0 ]; then
     log "    ✓ News scraper completed"
 else
@@ -62,7 +62,7 @@ else
 fi
 
 log "  - Scraping tenders..."
-conda run -n Chatbot python src/scraper/tenders_events_scraper.py >> "$LOG_FILE" 2>&1
+conda run -n Chatbot scrapy crawl crri_tenders_events -O "data/raw/scraped_tenders_events_$(date +%Y%m%d_%H%M%S).json" >> "$LOG_FILE" 2>&1
 if [ $? -eq 0 ]; then
     log "    ✓ Tenders scraper completed"
 else
@@ -71,7 +71,7 @@ else
 fi
 
 log "  - Scraping events..."
-conda run -n Chatbot python src/scraper/events_scraper.py >> "$LOG_FILE" 2>&1
+conda run -n Chatbot scrapy crawl crri_events -O "data/raw/scraped_events_$(date +%Y%m%d_%H%M%S).json" >> "$LOG_FILE" 2>&1
 if [ $? -eq 0 ]; then
     log "    ✓ Events scraper completed"
 else
