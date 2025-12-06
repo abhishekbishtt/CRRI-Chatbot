@@ -264,14 +264,29 @@ class DataProcessor:
             
             ref_no = self.standardize_text(record.get('reference_no', ''))
             description = self.standardize_text(record.get('description', ''))
+            deadline = self.standardize_text(record.get('bid_submission_deadline', 'Not specified'))
             
-            text = f"Tender: {title}. Reference: {ref_no}. {description}"
+            # Extract PDF files to include in text
+            pdf_files = record.get('pdf_files', [])
+            pdf_text_parts = []
+            for pdf in pdf_files:
+                p_title = self.standardize_text(pdf.get('title', 'Document'))
+                p_url = pdf.get('url', '')
+                if p_url:
+                    # Use Markdown format for links so the LLM picks it up easily
+                    pdf_text_parts.append(f"[{p_title}]({p_url})")
+            
+            pdf_section = "Documents: " + ", ".join(pdf_text_parts) if pdf_text_parts else ""
+            
+            text = f"Tender: {title}. Reference: {ref_no}. Deadline: {deadline}. {description}. {pdf_section}"
             
             metadata = {
                 'source_type': 'tender',
                 'page_type': 'tender_detail',
                 'tender_title': title,
                 'reference_no': ref_no,
+                'bid_submission_deadline': deadline,
+                'pdf_files': pdf_files,
                 'source_url': record.get('source_url', record.get('url', 'unknown')),
                 'scraped_at': record.get('scraped_at', datetime.utcnow().isoformat())
             }

@@ -359,7 +359,14 @@ async def chat_endpoint(query_request: QueryRequest):
             "- If something's not in the information, say so.\n"
             "- Rephrase and summarize - don't just copy text word-for-word.\n\n"
             
-            "**Formatting:**\n"
+            "**Formatting for Tenders:**\n"
+            "- If the user asks about tenders, use this format for EACH tender:\n"
+            "  ### [Tender Title]\n"
+            "  - **Deadline:** [Date/Time]\n"
+            "  - **Description:** [Brief summary]\n"
+            "  - **Documents:** [Link Title](URL), [Link Title](URL)\n\n"
+            
+            "**General Formatting:**\n"
             "- Use headings (###).\n"
             "- Use bullet points (*).\n"
             "- Always turn URLs into clickable links.\n"
