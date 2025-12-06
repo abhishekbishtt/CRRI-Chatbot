@@ -114,20 +114,10 @@ app = FastAPI(
 
 # --- Add CORS Middleware Configuration ---
 origins = [
-    "http://localhost:5173",  # Vite's default port
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://localhost:5174",  # Vite alternative ports
-    "http://127.0.0.1:5174",
-    "http://localhost:5175",
-    "http://127.0.0.1:5175",
-    "http://localhost:5176",
-    "http://127.0.0.1:5176",
-    "http://localhost:3000",  # If you were using Create React App
-    "http://127.0.0.1:3000",
     "http://localhost:8080",  # Backend port (for testing)
     "http://127.0.0.1:8080",
-    "http://localhost:7860",  # Hugging Face Spaces local testing
-    "http://127.0.0.1:7860",
     "https://huggingface.co",  # Hugging Face main domain
     "https://*.hf.space",  # Hugging Face Spaces domain pattern
 ]
@@ -202,19 +192,33 @@ async def startup_event():
 # --- Helper Function for Query Analysis ---
 async def analyze_query(query: str, chat_model: ChatGoogleGenerativeAI) -> Dict[str, Any]:
     """
-    Analyzes the user's query to extract potential filters (like Division).
+    Analyzes the user's query to extract:
+    - target_division: Specific division mentioned
+    - query_type: Type of query (list_contacts, list_staff, equipment_detail, etc.)
+    - requires_exhaustive: Whether query needs ALL matching documents
     """
     system_prompt = (
         "You are an expert query analyzer for the CRRI (Central Road Research Institute) chatbot. "
-        "Your goal is to identify if the user is asking about a specific Division or Department.\n\n"
-        f"Here is the list of valid Divisions:\n{json.dumps(VALID_DIVISIONS, indent=2)}\n\n"
-        "Instructions:\n"
-        "1. Analyze the user's query.\n"
-        "2. If the query mentions a division (even with an abbreviation like 'CCN' for 'Computer Center & Networking' or 'BES' for 'Bridge Engineering...'), "
-        "return the EXACT name from the valid list.\n"
-        "3. Common abbreviations: 'CCN' -> 'Computer Center & Networking', 'ESD' -> 'Engineering Service Division', 'GWS' -> 'General & Works Section'.\n"
-        "4. If no specific division is mentioned, return null for the division.\n"
-        "5. Return the output as a JSON object with a single key 'target_division'.\n"
+        "Analyze the query and return a JSON object with these fields:\n\n"
+        
+        "1. **target_division**: If query mentions a division, return EXACT name from this list:\n"
+        f"{json.dumps(VALID_DIVISIONS, indent=2)}\n"
+        "Common abbreviations: 'CCN' -> 'Computer Center & Networking', 'ESD' -> 'Engineering Service Division', "
+        "'GWS' -> 'General & Works Section', 'BES' -> 'Bridge Engineering and Structures'.\n"
+        "Return null if no division mentioned.\n\n"
+        
+        "2. **query_type**: Classify the query as one of:\n"
+        "   - 'list_contacts': User wants phone numbers, emails, or contact info for multiple people\n"
+        "   - 'list_staff': User wants list of staff/employees/members\n"
+        "   - 'list_equipment': User wants list of equipment/facilities\n"
+        "   - 'count_query': User asks 'how many' of something\n"
+        "   - 'detail_query': User wants details about a specific item/person\n"
+        "   - 'general': Other general questions\n\n"
+        
+        "3. **requires_exhaustive**: Set to true if query implies needing ALL items "
+        "(e.g., 'list all', 'everyone', 'all contacts', 'how many'). Otherwise false.\n\n"
+        
+        "Return ONLY valid JSON."
     )
     
     prompt = ChatPromptTemplate.from_messages([
@@ -226,10 +230,14 @@ async def analyze_query(query: str, chat_model: ChatGoogleGenerativeAI) -> Dict[
     
     try:
         result = await chain.ainvoke({"query": query})
+        # Ensure all expected fields exist
+        result.setdefault("target_division", None)
+        result.setdefault("query_type", "general")
+        result.setdefault("requires_exhaustive", False)
         return result
     except Exception as e:
         logger.error(f"Error analyzing query: {e}")
-        return {"target_division": None}
+        return {"target_division": None, "query_type": "general", "requires_exhaustive": False}
 
 
 # --- API Endpoints ---
@@ -261,42 +269,40 @@ async def chat_endpoint(query_request: QueryRequest):
         # --- 1. Query Analysis ---
         analysis_result = await analyze_query(latest_question, chat_model)
         target_division = analysis_result.get("target_division")
+        query_type = analysis_result.get("query_type", "general")
+        requires_exhaustive = analysis_result.get("requires_exhaustive", False)
         logger.info(f"Query Analysis Result: {analysis_result}")
 
-        # --- 2. Dynamic Retrieval ---
-        search_kwargs = {
-            "k": 15, # Default k
+        # --- 2. Smart Dynamic k Selection ---
+        # Base k values by query type
+        k_by_type = {
+            "list_contacts": 200,
+            "list_staff": 300,
+            "list_equipment": 100,
+            "count_query": 200,
+            "detail_query": 20,
+            "general": 15
         }
-
-        # Check if this is a "staff list" type query
-        is_staff_list_query = any(phrase in latest_question.lower() for phrase in [
-            "staff list", "list of staff", "all staff", "staff members", 
-            "who are in", "members of", "people in", "full staff", "all members"
-        ])
-        logger.info(f"Is staff list query: {is_staff_list_query}, Query: '{latest_question}'")
-
-        if target_division and is_staff_list_query:
-            # For division-specific staff lists, retrieve MANY documents without filter
-            # We'll filter by division in post-processing
-            search_kwargs["k"] = 500
-            logger.info(f"Staff list query for division: {target_division}, retrieving {search_kwargs['k']} docs")
-        elif target_division:
-            logger.info(f"Applying search for division: {target_division}")
-            search_kwargs["k"] = 100
-        elif is_staff_list_query:
-            # If asking for staff list but no specific division, increase k
-            search_kwargs["k"] = 100
+        k = k_by_type.get(query_type, 15)
         
-        # Perform Similarity Search (without metadata filter)
-        # For staff list queries, modify the query to boost staff profile matches
+        # Increase k for exhaustive queries or division-specific lookups
+        if requires_exhaustive:
+            k = max(k, 300)
+        if target_division and query_type in ["list_contacts", "list_staff"]:
+            k = 500  # Get all docs for that division
+            
+        logger.info(f"Query type: {query_type}, requires_exhaustive: {requires_exhaustive}, k={k}")
+
+        # --- 3. Retrieval ---
+        # Modify search query for better staff/contact retrieval
         search_query = latest_question
-        if target_division and is_staff_list_query:
-            search_query = f"staff members employees scientists technicians officers working in {target_division} division their names designations positions"
+        if target_division and query_type in ["list_contacts", "list_staff"]:
+            search_query = f"staff members employees scientists technicians officers working in {target_division} division their names designations positions contacts phone email"
             logger.info(f"Modified search query for better staff retrieval: '{search_query}'")
         
         docs = vector_store.similarity_search(
             search_query,
-            k=search_kwargs["k"]
+            k=k
         )
         logger.info(f"Retrieved {len(docs)} documents from Pinecone.")
         
@@ -307,7 +313,7 @@ async def chat_endpoint(query_request: QueryRequest):
             logger.info(f"Sample primary_division: {sample_meta.get('primary_division', 'NOT FOUND')}")
         
         # Post-filter by division if needed
-        if target_division and is_staff_list_query:
+        if target_division and query_type in ["list_contacts", "list_staff"]:
             filtered_docs = []
             for doc in docs:
                 metadata = doc.metadata
@@ -324,7 +330,7 @@ async def chat_endpoint(query_request: QueryRequest):
             logger.info(f"After filtering by division '{target_division}': {len(docs)} documents")
         
         # Extract unique staff names from retrieved docs for debugging
-        if target_division and is_staff_list_query:
+        if target_division and query_type in ["list_contacts", "list_staff"]:
             staff_names = set()
             for doc in docs:
                 metadata = doc.metadata
@@ -349,27 +355,72 @@ async def chat_endpoint(query_request: QueryRequest):
             
             "**Your Personality:**\n"
             "- Speak naturally, warm and approachable.\n"
-            "- Avoid robotic phrases.\n\n"
+            "- Avoid robotic phrases like 'Certainly!' or 'Of course!'.\n\n"
+            
+            "**RESPONSE LENGTH - CRITICAL:**\n"
+            "- **Be CONCISE by default.** Give brief, to-the-point answers.\n"
+            "- Only provide detailed information if the user explicitly asks for details/more info.\n"
+            "- For simple questions, a 2-3 sentence answer is often enough.\n"
+            "- Don't overwhelm users with information they didn't ask for.\n\n"
             
             "**How to Answer:**\n"
             "- Draw from the `Context` and `Conversation History` provided below.\n"
             "- **CRITICAL**: If the user asks for a list of people/staff, you MUST list EVERY SINGLE PERSON mentioned in the context. Do not omit anyone.\n"
-            "- Count the unique names in the context and ensure your list matches that count.\n"
-            "- If the context contains a list of staff members, present them ALL clearly with their designations.\n"
-            "- If something's not in the information, say so.\n"
+            "- If something's not in the information, say so honestly and direct them to contact the relevant division.\n"
             "- Rephrase and summarize - don't just copy text word-for-word.\n\n"
             
-            "**Formatting for Tenders:**\n"
-            "- If the user asks about tenders, use this format for EACH tender:\n"
-            "  ### [Tender Title]\n"
-            "  - **Deadline:** [Date/Time]\n"
-            "  - **Description:** [Brief summary]\n"
-            "  - **Documents:** [Link Title](URL), [Link Title](URL)\n\n"
+            "**COUNTING - STRICT RULE:**\n"
+            "- **NEVER make up or guess a count.** If asked 'how many' of something, count the actual items in the Context.\n"
+            "- If you cannot count precisely from the context, say 'I have information on several...' instead of giving a made-up number.\n"
+            "- **DO NOT say a specific number unless you've actually counted the items in the Context.**\n\n"
             
-            "**General Formatting:**\n"
-            "- Use headings (###).\n"
-            "- Use bullet points (*).\n"
-            "- Always turn URLs into clickable links.\n"
+            "**USAGE CHARGES & PRICING - STRICT RULE:**\n"
+            "- **COMPLETELY IGNORE any pricing, charges, or 'no charges' information in the Context - do NOT include it in your response.**\n"
+            "- **NEVER mention specific charges, fees, or pricing for any equipment, facility, or service.**\n"
+            "- **NEVER say something is 'free', has 'no charges', or 'no usage charges' - even if the Context says so.**\n"
+            "- If the user specifically asks about pricing/charges, respond ONLY with: 'For usage charges and pricing information, please contact the relevant division directly.'\n"
+            "- If the user did NOT ask about charges, simply DO NOT mention pricing at all.\n\n"
+            
+            "**FORMATTING RULES (VERY IMPORTANT):**\n\n"
+            
+            "1. **For Tenders/Events with structured data** - ALWAYS wrap JSON in proper code blocks:\n"
+            "   Write a brief 1-2 sentence intro, then include JSON:\n"
+            "   ```json\n"
+            "   {{\"tenders\": [{{\"title\": \"...\", \"deadline\": \"...\", \"description\": \"...\", \"status\": \"active/expiring/expired\", \"documents\": [{{\"title\": \"...\", \"url\": \"...\"}}]}}]}}\n"
+            "   ```\n"
+            "   **CRITICAL: JSON must ALWAYS be inside ```json ... ``` code blocks. NEVER output raw JSON in text.**\n"
+            "   Set status to 'expiring' if deadline is within 7 days, 'expired' if past, otherwise 'active'.\n\n"
+            
+            "2. **For Staff/Person Info** - Use this clean format:\n"
+            "   **Dr. Name Here** | Designation\n"
+            "   📧 email@crri.res.in · 📞 Phone Number\n"
+            "   Division: Division Name\n"
+            "   (Add a blank line between each person)\n\n"
+            
+            "3. **For Contact/Location Info** - Use inline format:\n"
+            "   📍 Address · 📞 Phone · 📧 Email · 🌐 Website\n\n"
+            
+            "4. **For Lists of Items (3+ items)** - Use a clean table:\n"
+            "   | Name | Designation | Division |\n"
+            "   |------|-------------|----------|\n"
+            "   | Dr. X | Scientist | Geo |\n\n"
+            
+            "5. **For General Information** - Use paragraphs with **bold keywords**.\n"
+            "   Only use bullet points when listing 2-4 distinct items.\n"
+            "   AVOID excessive bullet points - prefer flowing text.\n\n"
+            
+            "6. **For Events** - Similar to tenders, include JSON in code blocks:\n"
+            "   ```json\n"
+            "   {{\"events\": [{{\"name\": \"...\", \"date\": \"...\", \"status\": \"...\", \"brochure_url\": \"...\"}}]}}\n"
+            "   ```\n\n"
+            
+            "**AVOID:**\n"
+            "- Walls of bullet points\n"
+            "- Repeating the same information\n"
+            "- Generic filler text\n"
+            "- Overly long responses when a short answer suffices\n"
+            "- Raw JSON in text (must be in code blocks)\n"
+            "- Mentioning any specific charges, prices, or saying things are free\n"
         )
 
         messages_for_prompt = [("system", system_prompt)]
@@ -388,7 +439,7 @@ async def chat_endpoint(query_request: QueryRequest):
         final_user_prompt_with_context = (
             f"Here's my question: {escaped_latest_question}\n\n"
             f"Context from CRRI website:\n{context}\n\n"
-            f"Please answer in a friendly, natural way - and remember to use headings and bullet points!"
+            f"Please answer following the formatting rules. Keep it clean and professional."
         )
         messages_for_prompt.append(("human", final_user_prompt_with_context))
 

@@ -53,7 +53,7 @@ else
 fi
 
 log "  - Scraping equipment..."
-conda run -n Chatbot python src/scraper/equipment_facilities_scraper.py >> "$LOG_FILE" 2>&1
+conda run -n Chatbot scrapy crawl crri_equipment -O "data/raw/scraped_equipment_$(date +%Y%m%d_%H%M%S).json" >> "$LOG_FILE" 2>&1
 if [ $? -eq 0 ]; then
     log "    ✓ Equipment scraper completed"
 else
