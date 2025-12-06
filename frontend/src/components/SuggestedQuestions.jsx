@@ -1,4 +1,3 @@
-// frontend/src/components/SuggestedQuestions.jsx
 import React from 'react';
 import { motion } from 'framer-motion';
 
