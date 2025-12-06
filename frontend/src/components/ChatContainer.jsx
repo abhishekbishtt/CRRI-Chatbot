@@ -12,12 +12,21 @@ const ChatContainer = () => {
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
   };
 
+  // Scroll to top when component mounts (chat loads/resets)
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading]);
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Scroll to bottom only when loading starts (user sent message)
+  // We avoid scrolling on bot response so the user sees the start of the message
+  useEffect(() => {
+    if (isLoading) {
+      scrollToBottom();
+    }
+  }, [isLoading]);
 
   const handleSend = async () => {
     const question = inputText.trim();

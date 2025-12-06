@@ -9,7 +9,7 @@ const SuggestedQuestions = ({ onQuestionClick }) => {
         },
         {
             icon: '👤',
-            text: 'May I know the contact details of Miss Reeta Kukreja?'
+            text: 'May I know the contact details of Mrs Reeta Kukreja?'
         },
         {
             icon: '🏠',
